@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>NC Released Inmates — County Map</title>
+<title>NC Released Inmates â County Map</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Interactive map of recently released North Carolina inmates by county of conviction.">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -70,6 +70,8 @@
   #status.hidden { display: none; }
   .leaflet-popup-content { font-size: 12px; }
   .leaflet-popup-content b { display: block; margin-bottom: 4px; font-size: 13px; }
+  .county-tooltip { padding: 8px 10px; background: #fff; border: 1px solid #d1d5db; box-shadow: 0 4px 10px rgba(0,0,0,0.08); border-radius: 6px; min-width: 150px; }
+  .county-tooltip::before { border-top-color: #d1d5db !important; }
   footer { padding: 8px 16px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); background: var(--panel); }
   footer a { color: var(--accent); text-decoration: none; }
   .filter-summary { font-size: 12px; color: var(--muted); margin-top: 6px; padding: 4px 8px; background: #f3f4f6; border-radius: 4px; display: inline-block; }
@@ -79,7 +81,7 @@
 </head>
 <body>
 <header>
-  <h1>North Carolina Released Inmates — County Map</h1>
+  <h1>North Carolina Released Inmates â County Map</h1>
   <div class="sub">Inmates plotted by county of most recent conviction (NC Department of Adult Correction public records).</div>
 </header>
 <div id="app">
@@ -95,9 +97,9 @@
       </div>
       <h2 style="margin-top:14px;">Filter</h2>
       <div class="row" id="tier-filters">
-        <label class="checkbox tier-1"><input type="checkbox" data-tier="1" checked> Tier 1 — Homicide</label>
-        <label class="checkbox tier-2"><input type="checkbox" data-tier="2" checked> Tier 2 — Sex offenses</label>
-        <label class="checkbox tier-3"><input type="checkbox" data-tier="3" checked> Tier 3 — Other violent</label>
+        <label class="checkbox tier-1"><input type="checkbox" data-tier="1" checked> Tier 1 â Homicide</label>
+        <label class="checkbox tier-2"><input type="checkbox" data-tier="2" checked> Tier 2 â Sex offenses</label>
+        <label class="checkbox tier-3"><input type="checkbox" data-tier="3" checked> Tier 3 â Other violent</label>
         <label class="checkbox tier-4"><input type="checkbox" data-tier="4" checked> Other offenses</label>
       </div>
       <div class="row">
@@ -118,7 +120,7 @@
   County boundaries: US Census via <a href="https://github.com/topojson/us-atlas" target="_blank" rel="noopener">us-atlas</a>.
   All data shown is public record.
 </footer>
-<div id="status">Loading…</div>
+<div id="status">Loadingâ¦</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -143,14 +145,14 @@ let countyBounds = {};     // name -> L.LatLngBounds (for jittering dots)
 const TIER_NAMES = { 1: 'Homicide', 2: 'Sex Offenses', 3: 'Other Violent', 4: 'Other Offenses' };
 const TIER_COLORS = { 1: '#b91c1c', 2: '#b45309', 3: '#6d28d9', 4: '#0f766e' };
 
-// Quantile choropleth scale
+// Quantile choropleth scale (blues)
 function colorForCount(c) {
-  if (c === 0) return '#f5f5f4';
-  if (c <= 2) return '#fee0d2';
-  if (c <= 5) return '#fcae91';
-  if (c <= 10) return '#fb6a4a';
-  if (c <= 20) return '#de2d26';
-  return '#a50f15';
+  if (c === 0) return '#f0f4f8';
+  if (c <= 2) return '#deebf7';
+  if (c <= 5) return '#9ecae1';
+  if (c <= 10) return '#4292c6';
+  if (c <= 20) return '#2171b5';
+  return '#08306b';
 }
 
 // Filters
@@ -182,6 +184,37 @@ function countByCounty(records) {
   return m;
 }
 
+// Build per-tier breakdown by county. Always uses tier filters but ignores recidivist
+// filter for the breakdown so the tooltip is informative regardless.
+function breakdownByCounty(records) {
+  const m = {};
+  for (const r of records) {
+    if (!r.c) continue;
+    const key = r.c.replace(/ County$/i, '');
+    if (!m[key]) m[key] = { 1: 0, 2: 0, 3: 0, 4: 0, recid: 0, total: 0 };
+    m[key][r.t] = (m[key][r.t] || 0) + 1;
+    m[key].total += 1;
+    if (r.r) m[key].recid += 1;
+  }
+  return m;
+}
+
+function tooltipHtml(name, b) {
+  if (!b || !b.total) {
+    return `<div style="font-weight:600;font-size:13px;margin-bottom:4px">${name} County</div>
+            <div style="color:#6b7280;font-size:11px">No matching inmates</div>`;
+  }
+  const row = (label, n, color) => n ? `<div style="display:flex;justify-content:space-between;gap:18px;font-size:11px;line-height:1.5">
+    <span><span style="display:inline-block;width:8px;height:8px;background:${color};border-radius:2px;margin-right:5px;vertical-align:middle"></span>${label}</span>
+    <span style="font-variant-numeric:tabular-nums"><b>${n}</b></span></div>` : '';
+  return `<div style="font-weight:600;font-size:13px;margin-bottom:4px">${name} County</div>
+    <div style="font-size:11px;color:#6b7280;margin-bottom:6px">${b.total} total inmate${b.total !== 1 ? 's' : ''}${b.recid ? ` &middot; ${b.recid} re-offended` : ''}</div>
+    ${row('Homicide', b[1], '#1e40af')}
+    ${row('Sex offenses', b[2], '#3b82f6')}
+    ${row('Other violent', b[3], '#60a5fa')}
+    ${row('Other offenses', b[4], '#93c5fd')}`;
+}
+
 // Compute simple polygon centroid from a GeoJSON Polygon/MultiPolygon
 function geomCentroid(geom) {
   let total = [0, 0], n = 0;
@@ -195,7 +228,9 @@ function geomCentroid(geom) {
 function renderChoropleth() {
   if (countyLayer) { map.removeLayer(countyLayer); countyLayer = null; }
   if (dotLayer) { map.removeLayer(dotLayer); dotLayer = null; }
-  const counts = countByCounty(filteredInmates());
+  const filtered = filteredInmates();
+  const counts = countByCounty(filtered);
+  const breakdown = breakdownByCounty(filtered);
   countyLayer = L.geoJSON(geo, {
     style: (f) => {
       const cnt = counts[f.properties.name] || 0;
@@ -209,8 +244,7 @@ function renderChoropleth() {
       };
     },
     onEachFeature: (f, layer) => {
-      const cnt = counts[f.properties.name] || 0;
-      layer.bindTooltip(`<b>${f.properties.name} County</b><br>${cnt} inmate${cnt !== 1 ? 's' : ''}`, { sticky: true });
+      layer.bindTooltip(tooltipHtml(f.properties.name, breakdown[f.properties.name]), { sticky: true, className: 'county-tooltip' });
       layer.on('click', () => {
         activeCounty = (activeCounty === f.properties.name) ? null : f.properties.name;
         renderAll();
@@ -224,9 +258,11 @@ function renderDots() {
   if (countyLayer) { map.removeLayer(countyLayer); countyLayer = null; }
   if (dotLayer) { map.removeLayer(dotLayer); dotLayer = null; }
   // Show faded county outlines so users still see geography
+  const breakdown = breakdownByCounty(filteredInmates());
   countyLayer = L.geoJSON(geo, {
-    style: () => ({ fillColor: '#f5f5f4', weight: 0.5, color: '#bbb', fillOpacity: 0.4 }),
+    style: () => ({ fillColor: '#f0f4f8', weight: 0.5, color: '#bbb', fillOpacity: 0.4 }),
     onEachFeature: (f, layer) => {
+      layer.bindTooltip(tooltipHtml(f.properties.name, breakdown[f.properties.name]), { sticky: true, className: 'county-tooltip' });
       layer.on('click', () => {
         activeCounty = (activeCounty === f.properties.name) ? null : f.properties.name;
         renderAll();
@@ -265,10 +301,10 @@ function buildPopup(rec) {
   const tierClass = `pill-tier-${rec.t}`;
   return `
     <b>${rec.f || '(no name)'}</b>
-    <span class="pill ${tierClass}">Tier ${rec.t} — ${TIER_NAMES[rec.t]}</span>
+    <span class="pill ${tierClass}">Tier ${rec.t} â ${TIER_NAMES[rec.t]}</span>
     ${rec.r ? '<span class="pill pill-recid">Re-offended</span>' : ''}
-    <div style="margin-top:4px;font-size:11px;color:#6b7280">Inmate # ${rec.n} • ${rec.c || 'County unknown'}</div>
-    <div style="margin-top:6px"><b style="font-size:11px;color:#6b7280">Original offense</b><br>${(rec.o || '—')}</div>
+    <div style="margin-top:4px;font-size:11px;color:#6b7280">Inmate # ${rec.n} â¢ ${rec.c || 'County unknown'}</div>
+    <div style="margin-top:6px"><b style="font-size:11px;color:#6b7280">Original offense</b><br>${(rec.o || 'â')}</div>
     ${rec.r ? `<div style="margin-top:6px"><b style="font-size:11px;color:#6b7280">Post-re-entry offense</b><br>${(rec.p || '')}</div>` : ''}
   `;
 }
@@ -282,9 +318,9 @@ function renderList() {
   let visible = all;
   if (activeCounty) {
     visible = all.filter(r => r.c && r.c.replace(/ County$/i, '') === activeCounty);
-    title.textContent = `${activeCounty} County · ${visible.length} inmate${visible.length !== 1 ? 's' : ''}`;
+    title.textContent = `${activeCounty} County Â· ${visible.length} inmate${visible.length !== 1 ? 's' : ''}`;
   } else {
-    title.textContent = `All counties · ${all.length} inmate${all.length !== 1 ? 's' : ''}`;
+    title.textContent = `All counties Â· ${all.length} inmate${all.length !== 1 ? 's' : ''}`;
   }
 
   // Stats
@@ -309,17 +345,17 @@ function renderList() {
   for (const rec of slice) {
     html += `<div class="card">
       <div class="name">${escapeHtml(rec.f || '(no name)')}</div>
-      <div class="meta">Inmate # ${escapeHtml(rec.n)} • ${escapeHtml(rec.c || 'County unknown')}</div>
+      <div class="meta">Inmate # ${escapeHtml(rec.n)} â¢ ${escapeHtml(rec.c || 'County unknown')}</div>
       <span class="pill pill-tier-${rec.t}">${escapeHtml(rec.tl || ('Tier ' + rec.t))}</span>
       ${rec.r ? '<span class="pill pill-recid">Re-offended after release</span>' : ''}
       <details>
         <summary>Show offenses</summary>
-        <div class="field"><b>Original offense(s)</b><span>${escapeHtml(rec.o || '—')}</span></div>
+        <div class="field"><b>Original offense(s)</b><span>${escapeHtml(rec.o || 'â')}</span></div>
         ${rec.p && rec.r ? `<div class="field"><b>Post-re-entry offense(s)</b><span>${escapeHtml(rec.p)}</span></div>` : ''}
         ${rec.s ? `<div class="field"><b>Inmate status</b><span>${escapeHtml(rec.s)}</span></div>` : ''}
         ${rec.ps ? `<div class="field"><b>Parole status</b><span>${escapeHtml(rec.ps)}</span></div>` : ''}
         ${rec.oc ? `<div class="field"><b>Other counties on record</b><span>${escapeHtml(rec.oc)}</span></div>` : ''}
-        <div class="field"><a href="https://webapps.doc.state.nc.us/opi/viewoffender.do?method=view&offenderID=${escapeHtml(rec.n)}" target="_blank" rel="noopener">View NC DAC record →</a></div>
+        <div class="field"><a href="https://webapps.doc.state.nc.us/opi/viewoffender.do?method=view&offenderID=${escapeHtml(rec.n)}" target="_blank" rel="noopener">View NC DAC record â</a></div>
       </details>
     </div>`;
   }
@@ -336,12 +372,12 @@ function renderLegend() {
   if (view === 'choropleth') {
     el.innerHTML = `
       <span>Inmates per county:</span>
-      <span><span class="swatch" style="background:#f5f5f4"></span>0</span>
-      <span><span class="swatch" style="background:#fee0d2"></span>1–2</span>
-      <span><span class="swatch" style="background:#fcae91"></span>3–5</span>
-      <span><span class="swatch" style="background:#fb6a4a"></span>6–10</span>
-      <span><span class="swatch" style="background:#de2d26"></span>11–20</span>
-      <span><span class="swatch" style="background:#a50f15"></span>21+</span>
+      <span><span class="swatch" style="background:#f0f4f8"></span>0</span>
+      <span><span class="swatch" style="background:#deebf7"></span>1â2</span>
+      <span><span class="swatch" style="background:#9ecae1"></span>3â5</span>
+      <span><span class="swatch" style="background:#4292c6"></span>6â10</span>
+      <span><span class="swatch" style="background:#2171b5"></span>11â20</span>
+      <span><span class="swatch" style="background:#08306b"></span>21+</span>
     `;
   } else {
     el.innerHTML = `
@@ -350,7 +386,7 @@ function renderLegend() {
       <span><span class="swatch" style="background:${TIER_COLORS[2]}"></span>Sex offenses</span>
       <span><span class="swatch" style="background:${TIER_COLORS[3]}"></span>Other violent</span>
       <span><span class="swatch" style="background:${TIER_COLORS[4]}"></span>Other</span>
-      <span style="margin-left:8px;font-style:italic">Dots are jittered within counties — locations are not exact addresses.</span>
+      <span style="margin-left:8px;font-style:italic">Dots are jittered within counties â locations are not exact addresses.</span>
     `;
   }
 }
@@ -364,7 +400,7 @@ function renderAll() {
 
 // Init
 async function init() {
-  showStatus('Loading inmate data…');
+  showStatus('Loading inmate dataâ¦');
   if (Array.isArray(window.__INMATES)) {
     inmates = window.__INMATES;
   } else {
@@ -372,7 +408,7 @@ async function init() {
     inmates = await inmRes.json();
   }
 
-  showStatus('Loading county boundaries…');
+  showStatus('Loading county boundariesâ¦');
   // Try a few CDN paths in order; first one that works wins
   const sources = [
     'https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json',
@@ -406,7 +442,7 @@ async function init() {
 
   // Build map
   map = L.map('map', { zoomSnap: 0.25, zoomDelta: 0.5 });
-  // No basemap — keeps it clean. Add light tile if you want streets:
+  // No basemap â keeps it clean. Add light tile if you want streets:
   // L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', opacity: 0.4 }).addTo(map);
   // Fit to NC
   const tmp = L.geoJSON(geo);
